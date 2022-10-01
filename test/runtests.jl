@@ -32,15 +32,31 @@ tmp_cart = Vector{CartesianIndex{2}}(undef, n)
 
 
 X1D = XD[:,1]
+X1F = XF[:,1]
 tmp = zeros(n)
 
-flse.logsumexp_reinterp2!(tmp, X1D)
+@test flse.turbologsumexp(X1F) ≈ logsumexp(X1F)
+@btime flse.turbologsumexp($X1F)  #   1.550 μs (0 allocations: 0 bytes)
+@btime logsumexp(X1F)             #   6.080 μs (1 allocation: 16 bytes)
 
+@test flse.logsumexp_reinterp2!(tmp, X1D) ≈ logsumexp(X1D)
 @test flse.logsumexp_reinterp1!(X1D) ≈ logsumexp(X1D)
+@btime logsumexp(X1D)                        #  12.400 μs (1 allocation: 48 bytes)
+@btime flse.logsumexp_reinterp2!($tmp, $X1D) #   3.987 μs (0 allocations: 0 bytes)
+@btime flse.logsumexp_reinterp2!($X1D)       #   4.071 μs (1 allocation: 7.94 KiB)
+@btime flse.logsumexp_reinterp1!($X1D)       #   8.100 μs (0 allocations: 0 bytes)
 
-@btime flse.logsumexp_reinterp1!($X1D)
+flse.logsumexp_reinterp3!(X1D)
+
+@test flse.logsumexp_reinterp2!(tmp, X1D) ≈ logsumexp(X1D)
+
+
+@btime flse.logsumexp_reinterp3!($X1D)
+
+
+
 @btime logsumexp($X1D)
-
+@btime logsumexp(X1F)
 
 theta_re = reinterpret(reshape, Float64, thetad)
 
