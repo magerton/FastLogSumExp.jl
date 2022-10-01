@@ -1,7 +1,7 @@
 module FastLogSumExp
 
 using LoopVectorization, VectorizationBase
-using LogExpFunctions, ForwardDiff, Tullio
+using LogExpFunctions, ForwardDiff, Tullio, StaticArrays
 
 const FD = ForwardDiff
 
@@ -19,6 +19,108 @@ end
     partials =  FD.partials(d)
     return FD.Dual{T}(log_fast(val), inv(val) * partials)
 end
+
+
+# s = zero(T)
+# for i = 1:n
+# 	tmp = exp(x[i] - u)
+# 	r[i] = tmp
+# 	s += tmp
+# end
+
+# invs = inv(s)
+# r .*= invs
+
+# return log1p(s-1) + u
+# end
+
+
+function logsumexp_reinterp1!(X::AbstractVector{<:FD.Dual{T,V,K}}) where {T,V,K}
+	Xre   = reinterpret(reshape, V, X)
+	n = length(X)
+	@assert (K+1, n) == size(Xre)
+
+	u = maximum(X)
+	uv = FD.value(u)
+
+	s = zero(V)
+	p = zeros(MVector{K,V})
+	for j in 1:n
+		tmp = exp(Xre[1,j] - uv)
+		s  += tmp
+		p .+= tmp .* Xre[2:end,j]
+	end
+
+	invs = inv(s)
+	@turbo p .*= invs	
+	v = log(s[1]) + uv
+
+	ptup = NTuple{K,V}(p)
+	ptl = FD.Partials{K,V}(ptup)
+
+	return FD.Dual{T,V,K}(v, ptl)
+
+end
+
+function logsumexp_reinterp2!(tmp::AbstractVector{V}, X::AbstractVector{<:FD.Dual{T,V,K}}) where {T,V,K}
+	@assert size(tmp) == size(X)
+	Xre   = reinterpret(reshape, V, X)
+	n = length(X)
+	@assert (K+1, n) == size(Xre)
+
+	u = maximum(X)
+	uv = FD.value(u)
+
+	s = zero(V)
+	@turbo for j in 1:n
+		s  += (tmp[j] = exp(Xre[1,j] - uv))
+	end
+
+	v = log(s) + uv
+
+	invs = inv(s)
+
+	pvec = zeros(MVector{K,V})
+	@turbo for j in 1:n
+		tmp[j] *= invs
+		for k in 1:K
+			pvec[k] += tmp[j]*Xre[k+1,j]
+		end
+	end
+
+	ptup = NTuple{K,V}(pvec)
+	ptl = FD.Partials{K,V}(ptup)
+
+	return FD.Dual{T,V,K}(v, ptl)
+
+end
+
+
+
+
+
+
+function logsumexp_reinterp!(Vbar::AbstractVector{D}, tmp_max::AbstractVector{D}, X::AbstractMatrix{D}) where {T,V,N,D<:FD.Dual{T,V,N}}
+	Vre   = reinterpret(reshape, V, Vbar)
+	tmpre = reinterpret(reshape, V, tmp_max)
+	Xre   = reinterpret(reshape, V, X)
+
+	m,n = size(X)
+	@assert (N+1, m, n) == size(Xre)
+
+	maximum!(tmp_max, X)
+	fill!(Vbar, 0)
+
+	@turbo for i in 1:m, j in 1:n
+		Vre[1,i] += exp(Xre[1,i,j] - tmpre[1,i])
+	end
+
+	@turbo for i in 1:m
+		Vbar[1,i] = log(Vbar[i]) + tmp_max[i]
+	end
+
+end
+
 
 "using base SIMD loops"
 function logsumexp_simd!(Vbar, tmp_max, X)

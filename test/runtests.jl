@@ -30,6 +30,24 @@ tmp_maxD = similar(VbarD)
 
 tmp_cart = Vector{CartesianIndex{2}}(undef, n)
 
+
+X1D = XD[:,1]
+tmp = zeros(n)
+
+flse.logsumexp_reinterp2!(tmp, X1D)
+
+@test flse.logsumexp_reinterp1!(X1D) ≈ logsumexp(X1D)
+
+@btime flse.logsumexp_reinterp1!($X1D)
+@btime logsumexp($X1D)
+
+
+theta_re = reinterpret(reshape, Float64, thetad)
+
+flse.logsumexp_reinterp!(   VbarD, tmp_maxD, XD)
+
+first(thetad)
+
 # -------------------------------------------
 # versions of stuff
 # -------------------------------------------
