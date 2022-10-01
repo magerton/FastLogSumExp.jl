@@ -1,5 +1,6 @@
 using ForwardDiff, Test, LogExpFunctions, LoopVectorization
 using FastLogSumExp
+# using BenchmarkTools
 
 const FD = ForwardDiff
 const flse = FastLogSumExp
@@ -35,77 +36,58 @@ X1D = XD[:,1]
 X1F = XF[:,1]
 tmp = zeros(n)
 
-@test flse.turbologsumexp(X1F) ≈ logsumexp(X1F)
-@btime flse.turbologsumexp($X1F)  #   1.550 μs (0 allocations: 0 bytes)
-@btime logsumexp(X1F)             #   6.080 μs (1 allocation: 16 bytes)
-
-@test flse.logsumexp_reinterp2!(tmp, X1D) ≈ logsumexp(X1D)
-@test flse.logsumexp_reinterp1!(X1D) ≈ logsumexp(X1D)
-@btime logsumexp(X1D)                        #  12.400 μs (1 allocation: 48 bytes)
-@btime flse.logsumexp_reinterp2!($tmp, $X1D) #   3.987 μs (0 allocations: 0 bytes)
-@btime flse.logsumexp_reinterp2!($X1D)       #   4.071 μs (1 allocation: 7.94 KiB)
-@btime flse.logsumexp_reinterp1!($X1D)       #   8.100 μs (0 allocations: 0 bytes)
-
-flse.logsumexp_reinterp3!(X1D)
-
-@test flse.logsumexp_reinterp2!(tmp, X1D) ≈ logsumexp(X1D)
-
-
-@btime flse.logsumexp_reinterp3!($X1D)
-
-
-
-@btime logsumexp($X1D)
-@btime logsumexp(X1F)
-
-theta_re = reinterpret(reshape, Float64, thetad)
-
-flse.logsumexp_reinterp!(   VbarD, tmp_maxD, XD)
-
-first(thetad)
-
 # -------------------------------------------
-# versions of stuff
+# vector versions
 # -------------------------------------------
 
-@testset "Check fcts are correct" begin
+@testset "check vectors" begin
+	@test flse.vec_logsumexp_float_turbo!(X1F)        ≈ logsumexp(X1F)
+	@test flse.vec_logsumexp_dual_reinterp!(tmp, X1D) ≈ logsumexp(X1D)
+end
+
+bg = BenchmarkGroup()
+bg["V"] = BenchmarkGroup(["V", "Vector" ])
+bg["V"]["Float64"] = BenchmarkGroup(["Float64"])
+bg["V"]["Dual"]    = BenchmarkGroup(["Dual"])
+
+bg["V"]["Float64"]["LogExpFunctions"] = @benchmarkable logsumexp($X1F)
+bg["V"]["Float64"]["Turbo"]           = @benchmarkable flse.vec_logsumexp_float_turbo!($X1F)
+
+bg["V"]["Dual"]["LogExpFunctions"] = @benchmarkable logsumexp(X1D)
+bg["V"]["Dual"]["Reinterp"]        = @benchmarkable flse.vec_logsumexp_dual_reinterp!($tmp, $X1D)
+bg["V"]["Dual"]["Reinterp no tmp"] = @benchmarkable flse.vec_logsumexp_dual_reinterp!($X1D)
+
+# -------------------------------------------
+# matrix versions
+# -------------------------------------------
+
+@testset "Check matrix" begin
 	@testset "Floats" begin
-		                     logsumexp!(        VbarF,           XF)
+		                         logsumexp!(        VbarF,           XF)
         bmark_F = copy(VbarF)
-		@test bmark_F ≈ flse.logsumexp_simd!(   VbarF, tmp_maxF, XF)
-		@test bmark_F ≈ flse.logsumexp_tricks!( VbarF, tmp_maxF, XF)
-		@test bmark_F ≈ flse.logsumexp_vanilla!(VbarF, tmp_maxF, XF)
-		@test bmark_F ≈ flse.logsumexp_turbo!(  VbarF, tmp_maxF, XF)
-		@test bmark_F ≈ flse.logsumexp_vmap!(   VbarF, tmp_maxF, XF, XFtmp)
-		@test bmark_F ≈ flse.logsumexp_tullio!( VbarF, tmp_maxF, XF)
+		@test bmark_F ≈ flse.mat_logsumexp_vexp_log_fast!(VbarF, tmp_maxF, XF)
+		@test bmark_F ≈ flse.mat_logsumexp_float_turbo!(  VbarF, tmp_maxF, XF)
 	end
 	
 	@testset "Duals" begin
-                             logsumexp!(        VbarD,           XD)
+                                 logsumexp!(              VbarD,           XD)
         bmark_D = copy(VbarD)
-		@test bmark_D ≈ flse.logsumexp_simd!(   VbarD, tmp_maxD, XD)
-		@test bmark_D ≈ flse.logsumexp_tricks!( VbarD, tmp_maxD, XD)
-		@test bmark_D ≈ flse.logsumexp_vanilla!(VbarD, tmp_maxD, XD)
-		# @test bmark_D ≈ flse.logsumexp_turbo!(  VbarD, tmp_maxD, XD)
-		@test bmark_D ≈ flse.logsumexp_vmap!(   VbarD, tmp_maxD, XD, XDtmp)
-		@test bmark_D ≈ flse.logsumexp_tullio!( VbarD, tmp_maxD, XD)
+		@test bmark_D ≈ flse.mat_logsumexp_vexp_log_fast!(VbarD, tmp_maxD,        XD)
+		@test bmark_D ≈ flse.mat_logsumexp_dual_reinterp!(VbarD, tmp_maxF, XFtmp, XD)
 	end
 end
 
-VbarDbmark = logsumexp!(VbarD, XD)
-flse.logsumexp_turbo2!(VbarD, tmp_maxD, XD)
-@test VbarD ≈ VbarDbmark
+bg["M"] = BenchmarkGroup(["M" ,"Matrix"])
+bg["M"]["Float64"] = BenchmarkGroup(["Float64"])
+bg["M"]["Dual"]    = BenchmarkGroup(["Dual"])
 
-@btime logsumexp!($VbarD, $XD);
-@btime flse.logsumexp_simd!(    $VbarD, $tmp_maxD, $XD); # 37
+bg["M"]["Float64"]["LogExpFunctions"] = @benchmarkable                        logsumexp!($VbarF,            $XF);
+bg["M"]["Float64"]["Fast LogExp"]     = @benchmarkable flse.mat_logsumexp_vexp_log_fast!($VbarF, $tmp_maxF, $XF);
+bg["M"]["Float64"]["Turbo"]           = @benchmarkable flse.mat_logsumexp_float_turbo!(  $VbarF, $tmp_maxF, $XF);
 
-@btime flse.logsumexp_tricks!(  $VbarD, $tmp_maxD, $XD); # 24.6
-@btime flse.logsumexp_specials!($VbarD, $tmp_maxD, $XD); # 24.6
-@btime flse.logsumexp_turbo2!(  $VbarD, $tmp_maxD, $XD); # 26.6
+bg["M"]["Dual"]["LogExpFunctions"] = @benchmarkable                        logsumexp!($VbarD,                    $XD);
+bg["M"]["Dual"]["Fast LogExp"]     = @benchmarkable flse.mat_logsumexp_vexp_log_fast!($VbarD, $tmp_maxD,         $XD);
+bg["M"]["Dual"]["Reinterp"]        = @benchmarkable flse.mat_logsumexp_dual_reinterp!($VbarD, $tmp_maxF, $XFtmp, $XD);
 
-@btime flse.logsumexp_tricks!(  $VbarF, $tmp_maxF, $XF); # 12.5
-@btime flse.logsumexp_specials!($VbarF, $tmp_maxF, $XF); # 12.3
-@btime flse.logsumexp_turbo2!(  $VbarF, $tmp_maxF, $XF); # 2.7
+results = run(bg, verbose=true)
 
-
-@profview [flse.logsumexp_tricks!(VbarD, tmp_maxD, XD) for i in 1:10_000]

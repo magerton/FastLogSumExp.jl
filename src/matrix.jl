@@ -1,82 +1,55 @@
+const AbsFloatMat = AbstractMatrix{<:AbstractFloat}
+const AbsFloatVec = AbstractVector{<:AbstractFloat}
+
 # --------------------------------------------------
 # Matrix logsumexp
 # --------------------------------------------------
 
-function logsumexp_reinterp!(Vbar::AbstractVector{D}, tmp_max::AbstractVector{D}, X::AbstractMatrix{D}) where {T,V,N,D<:FD.Dual{T,V,N}}
-	Vre   = reinterpret(reshape, V, Vbar)
-	tmpre = reinterpret(reshape, V, tmp_max)
+function mat_logsumexp_dual_reinterp!(
+    Vbar::AbstractVector{D}, tmp_max::AbstractVector{V}, 
+    tmpX::Matrix{V}, X::AbstractMatrix{D}
+    ) where {T,V,K,D<:FD.Dual{T,V,K}}
+	
+    m,n = size(X)
+
+    (m,n) == size(tmpX) || throw(DimensionMismatch())
+    (m,) == size(Vbar) == size(tmp_max) || throw(DimensionMismatch())
+
+    Vre   = reinterpret(reshape, V, Vbar)
 	Xre   = reinterpret(reshape, V, X)
 
-	m,n = size(X)
-	@assert (N+1, m, n) == size(Xre)
+    tmp_inv = tmp_max # resuse
 
-	maximum!(tmp_max, X)
 	fill!(Vbar, 0)
+    fill!(tmp_max, typemin(V))
+
+    @turbo for i in 1:m, j in 1:n
+        tmp_max[i] = max(tmp_max[i], Xre[1,i,j])
+    end
 
 	@turbo for i in 1:m, j in 1:n
-		Vre[1,i] += exp(Xre[1,i,j] - tmpre[1,i])
+        ex = exp(Xre[1,i,j] - tmp_max[i])
+        tmpX[i,j] = ex
+		Vre[1,i] += ex
 	end
 
-	@turbo for i in 1:m
-		Vbar[1,i] = log(Vbar[i]) + tmp_max[i]
+    @turbo for i in 1:m
+        v = Vre[1,i]
+        m = tmp_max[i]
+        tmp_inv[i] = inv(v)
+        Vre[1,i] = log(v) + m
+    end
+
+    @turbo for i in 1:m, j in 1:n, k in 1:K
+		Vre[k+1,i] += tmpX[i,j]*Xre[k+1,i,j]*tmp_inv[i]
 	end
+
+    return Vbar
 
 end
 
-
-"using base SIMD loops"
-function logsumexp_simd!(Vbar, tmp_max, X)
-	m,n, = size(X)
-	maximum!(tmp_max, X)
-	fill!(Vbar, 0)
-	@inbounds for j in 1:n
-		@simd for i in 1:m
-			Vbar[i] += exp(X[i,j] - tmp_max[i])
-		end
-	end
-	@inbounds @simd for i in 1:m
-		Vbar[i] = log(Vbar[i]) + tmp_max[i]
-	end
-	return Vbar
-end
-
-
-"using base SIMD loops with LoopVectorization tricks"
-function logsumexp_tricks!(Vbar, tmp_max, X)
-	m,n = size(X)
-	maximum!(tmp_max, X)
-    # tmp_max = vreduce(max, X; dims=2)
-	fill!(Vbar, 0)
-	@inbounds for j in 1:n
-		@simd for i in 1:m
-			Vbar[i] += vexp(X[i,j] - tmp_max[i])
-		end
-	end
-    	
-	@inbounds @simd for i in 1:m
-		Vbar[i] = log_fast(Vbar[i]) + tmp_max[i]
-	end
-	return Vbar
-end
-
-"using base SIMD loops with LoopVectorization tricks"
-function logsumexp_turbo2!(Vbar, tmp_max, X)
-	m,n = size(X)
-	maximum!(tmp_max, X)
-	fill!(Vbar, 0)
-    @turbo safe=false warn_check_args=false for i in 1:m, j in 1:n
-		Vbar[i] += vexp(X[i,j] - tmp_max[i])
-	end
-    	
-	@turbo safe=false warn_check_args=false for i in 1:m
-		Vbar[i] = log_fast(Vbar[i]) + tmp_max[i]
-	end
-	return Vbar
-end
-
-
-"using base SIMD loops with LoopVectorization tricks"
-function logsumexp_specials!(Vbar, tmp_max, X)
+"using base loops with LoopVectorization `exp` and `log`"
+function mat_logsumexp_vexp_log_fast!(Vbar, tmp_max, X)
     m,n = size(X)
 	maximum!(tmp_max, X)
 	fill!(Vbar, 0)
@@ -91,63 +64,28 @@ function logsumexp_specials!(Vbar, tmp_max, X)
 	return Vbar
 end
 
-
-"vanilla loop with no @simd"
-function logsumexp_vanilla!(Vbar, tmp_max, X)
-	m,n = size(X)
-	maximum!(tmp_max, X)
-	fill!(Vbar, 0)
-	for i in 1:m, j in 1:n
-		Vbar[i] += exp(X[i,j] - tmp_max[i])
-	end
-	for i in 1:m
-		Vbar[i] = log(Vbar[i]) + tmp_max[i]
-	end
-	return Vbar
-end
-
-
-
 """
 using `LoopVectorization.@turbo` loops
 
 **NOTE** - not compatible with `ForwardDiff.Dual` numbers!
 """
-function logsumexp_turbo!(Vbar, tmp_max, X)
+function mat_logsumexp_float_turbo!(Vbar::AbstractVector{T}, tmp_max::AbstractVector{T}, X::AbstractMatrix{T}) where {T<:AbstractFloat}
 	m,n = size(X)
-	maximum!(tmp_max, X)
+
 	fill!(Vbar, 0)
-	@turbo for i in 1:m, j in 1:n
+    fill!(tmp_max, typemin(T))
+    
+    @turbo for i in 1:m, j in 1:n
+        tmp_max[i] = max(tmp_max[i], X[i,j])
+    end
+    
+    @turbo for i in 1:m, j in 1:n
 		Vbar[i] += exp(X[i,j] - tmp_max[i])
 	end
-	@turbo for i in 1:m
+	
+    @turbo for i in 1:m
 		Vbar[i] = log(Vbar[i]) + tmp_max[i]
 	end
 	return Vbar
 end
 
- 
-"""
-using `LoopVectorization` `vmap` convenience fcts
-
-**NOTE** - this DOES work with `ForwardDiff.Dual` numbers!
-"""
-function logsumexp_vmap!(Vbar, tmp_max, X, Xtmp)
-	maximum!(tmp_max, X)
-	n = size(X,2)
-	for j in 1:n
-		Xtmpj = view(Xtmp, :, j)
-		Xj    = view(X, :, j)
-		vmap!((xij, mi) -> exp(xij-mi), Xtmpj, Xj, tmp_max)
-	end
-	Vbartmp = vreduce(+, Xtmp; dims=2)
-	vmap!((vi,mi) -> log(vi) + mi, Vbar, Vbartmp, tmp_max)
-	return Vbar
-end
-
-"Using tullio"
-function logsumexp_tullio!(Vbar, tmp_max, X)
-    @tullio avx=true (max) tmp_max[i] = X[i,j]
-    @tullio avx=true Vbar[i] = exp(X[i,j] - tmp_max[i])
-	@tullio avx=true Vbar[i] = log1p(Vbar[i]-1) + tmp_max[i]
-  end
