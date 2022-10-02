@@ -1,6 +1,6 @@
 using ForwardDiff, Test, LogExpFunctions, LoopVectorization
 using FastLogSumExp
-# using BenchmarkTools
+using BenchmarkTools
 
 const FD = ForwardDiff
 const flse = FastLogSumExp
@@ -45,18 +45,6 @@ tmp = zeros(n)
 	@test flse.vec_logsumexp_dual_reinterp!(tmp, X1D) ≈ logsumexp(X1D)
 end
 
-bg = BenchmarkGroup()
-bg["V"] = BenchmarkGroup(["V", "Vector" ])
-bg["V"]["Float64"] = BenchmarkGroup(["Float64"])
-bg["V"]["Dual"]    = BenchmarkGroup(["Dual"])
-
-bg["V"]["Float64"]["LogExpFunctions"] = @benchmarkable logsumexp($X1F)
-bg["V"]["Float64"]["Turbo"]           = @benchmarkable flse.vec_logsumexp_float_turbo!($X1F)
-
-bg["V"]["Dual"]["LogExpFunctions"] = @benchmarkable logsumexp(X1D)
-bg["V"]["Dual"]["Reinterp"]        = @benchmarkable flse.vec_logsumexp_dual_reinterp!($tmp, $X1D)
-bg["V"]["Dual"]["Reinterp no tmp"] = @benchmarkable flse.vec_logsumexp_dual_reinterp!($X1D)
-
 # -------------------------------------------
 # matrix versions
 # -------------------------------------------
@@ -77,6 +65,24 @@ bg["V"]["Dual"]["Reinterp no tmp"] = @benchmarkable flse.vec_logsumexp_dual_rein
 	end
 end
 
+# -------------------------------------------
+# Benchmarking
+# -------------------------------------------
+
+bg = BenchmarkGroup()
+
+bg["V"] = BenchmarkGroup(["V", "Vector" ])
+bg["V"]["Float64"] = BenchmarkGroup(["Float64"])
+bg["V"]["Dual"]    = BenchmarkGroup(["Dual"])
+
+bg["V"]["Float64"]["LogExpFunctions"] = @benchmarkable logsumexp($X1F)
+bg["V"]["Float64"]["Turbo"]           = @benchmarkable flse.vec_logsumexp_float_turbo!($X1F)
+
+bg["V"]["Dual"]["LogExpFunctions"] = @benchmarkable logsumexp(X1D)
+bg["V"]["Dual"]["Reinterp"]        = @benchmarkable flse.vec_logsumexp_dual_reinterp!($tmp, $X1D)
+bg["V"]["Dual"]["Reinterp no tmp"] = @benchmarkable flse.vec_logsumexp_dual_reinterp!($X1D)
+
+
 bg["M"] = BenchmarkGroup(["M" ,"Matrix"])
 bg["M"]["Float64"] = BenchmarkGroup(["Float64"])
 bg["M"]["Dual"]    = BenchmarkGroup(["Dual"])
@@ -91,3 +97,4 @@ bg["M"]["Dual"]["Reinterp"]        = @benchmarkable flse.mat_logsumexp_dual_rein
 
 results = run(bg, verbose=true)
 
+println(results)

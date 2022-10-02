@@ -1,7 +1,7 @@
 module FastLogSumExp
 
 using LoopVectorization, VectorizationBase
-using LogExpFunctions, ForwardDiff, Tullio, StaticArrays
+using LogExpFunctions, ForwardDiff, StaticArrays
 
 const FD = ForwardDiff
 
