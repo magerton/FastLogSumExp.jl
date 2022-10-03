@@ -7,7 +7,7 @@ const AbsFloatVec = AbstractVector{<:AbstractFloat}
 
 function mat_logsumexp_dual_reinterp!(
     Vbar::AbstractVector{D}, tmp_max::AbstractVector{V}, 
-    tmpX::Matrix{V}, X::AbstractMatrix{D}
+    tmpX::AbstractMatrix{V}, X::AbstractMatrix{D}
     ) where {T,V,K,D<:FD.Dual{T,V,K}}
     
     m,n = size(X)
