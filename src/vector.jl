@@ -60,3 +60,30 @@ function vec_logsumexp_float_turbo!(x::AbstractVector{T}) where {T<:AbstractFloa
 
     return log(s) + u
 end
+
+
+
+"softmax with @turbo. maybe a bit less safe/stable... but REALLY fast!"
+function vec_softmax_float_turbo!(r::AbstractVector, x::AbstractVector{T}) where {T<:AbstractFloat}
+    n = length(x)
+    u = maximum(x) # max value used to re-center
+
+    s = zero(T)
+    
+    @turbo for i = 1:n
+        tmp = exp(x[i] - u)
+        r[i] = tmp
+        s += tmp
+    end
+
+    invs = inv(s) # for doing softmax for derivatives
+
+    @turbo for i in 1:n
+        r[i] *= invs
+    end
+
+    return r
+end
+
+vec_softmax_float_turbo(x::AbstractVector{<:AbstractFloat}) = 
+    vec_softmax_float_turbo!(similar(x), x)
