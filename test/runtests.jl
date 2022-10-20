@@ -41,6 +41,7 @@ tmp = zeros(n)
 # -------------------------------------------
 
 @testset "check vectors" begin
+	@test flse.vec_softmax_float_turbo(X1F)           ≈ softmax(X1F)
 	@test flse.vec_logsumexp_float_turbo(X1F)         ≈ logsumexp(X1F)
 	@test flse.vec_logsumexp_dual_reinterp(X1D)       ≈ logsumexp(X1D)
 	@test flse.vec_logsumexp_dual_reinterp!(tmp, X1D) ≈ logsumexp(X1D)
@@ -65,6 +66,20 @@ end
 		@test bmark_D ≈ flse.mat_logsumexp_dual_reinterp!(VbarD, tmp_maxF, XFtmp, XD)
 	end
 end
+
+# -------------------------------------------
+# Benchmarking - softmax
+# -------------------------------------------
+
+bgsoft = BenchmarkGroup()
+bgsoft["V"] = BenchmarkGroup(["V", "Vector" ])
+bgsoft["V"]["Float64"] = BenchmarkGroup(["Float64"])
+bgsoft["V"]["Float64"]["LogExpFunctions"] = @benchmarkable softmax($X1F)
+bgsoft["V"]["Float64"]["Turbo"]           = @benchmarkable flse.vec_softmax_float_turbo($X1F)
+
+softresults = run(bgsoft, verbose=true)
+
+println(softresults)
 
 # -------------------------------------------
 # Benchmarking
