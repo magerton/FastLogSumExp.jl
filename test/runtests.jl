@@ -41,7 +41,8 @@ tmp = zeros(n)
 # -------------------------------------------
 
 @testset "check vectors" begin
-	@test flse.vec_logsumexp_float_turbo!(X1F)        ≈ logsumexp(X1F)
+	@test flse.vec_logsumexp_float_turbo(X1F)         ≈ logsumexp(X1F)
+	@test flse.vec_logsumexp_dual_reinterp(X1D)       ≈ logsumexp(X1D)
 	@test flse.vec_logsumexp_dual_reinterp!(tmp, X1D) ≈ logsumexp(X1D)
 end
 
@@ -76,11 +77,11 @@ bg["V"]["Float64"] = BenchmarkGroup(["Float64"])
 bg["V"]["Dual"]    = BenchmarkGroup(["Dual"])
 
 bg["V"]["Float64"]["LogExpFunctions"] = @benchmarkable logsumexp($X1F)
-bg["V"]["Float64"]["Turbo"]           = @benchmarkable flse.vec_logsumexp_float_turbo!($X1F)
+bg["V"]["Float64"]["Turbo"]           = @benchmarkable flse.vec_logsumexp_float_turbo($X1F)
 
 bg["V"]["Dual"]["LogExpFunctions"] = @benchmarkable logsumexp(X1D)
 bg["V"]["Dual"]["Reinterp"]        = @benchmarkable flse.vec_logsumexp_dual_reinterp!($tmp, $X1D)
-bg["V"]["Dual"]["Reinterp no tmp"] = @benchmarkable flse.vec_logsumexp_dual_reinterp!($X1D)
+bg["V"]["Dual"]["Reinterp no tmp"] = @benchmarkable flse.vec_logsumexp_dual_reinterp($X1D)
 
 
 bg["M"] = BenchmarkGroup(["M" ,"Matrix"])

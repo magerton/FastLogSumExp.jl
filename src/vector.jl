@@ -42,13 +42,13 @@ function vec_logsumexp_dual_reinterp!(tmp::AbstractVector{V}, X::AbstractVector{
 end
 
 "wrapper allocates tmp vector"
-function vec_logsumexp_dual_reinterp!(X::AbstractVector{<:FD.Dual{T,V,K}}) where {T,V,K}
+function vec_logsumexp_dual_reinterp(X::AbstractVector{<:FD.Dual{T,V,K}}) where {T,V,K}
     tmp = Vector{V}(undef, length(X))
     return vec_logsumexp_dual_reinterp!(tmp, X)
 end
 
 "logsumexp with @turbo. maybe a bit less safe/stable... but REALLY fast!"
-function vec_logsumexp_float_turbo!(x::AbstractVector{T}) where {T<:AbstractFloat}
+function vec_logsumexp_float_turbo(x::AbstractVector{T}) where {T<:AbstractFloat}
     n = length(x)
     u = maximum(x)                                       # max value used to re-center
     
