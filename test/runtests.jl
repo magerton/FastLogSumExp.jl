@@ -36,15 +36,19 @@ X1D = XD[:,1]
 X1F = XF[:,1]
 tmp = zeros(n)
 
+sigmas = 0.1 : 0.1 : 1.0
+
 # -------------------------------------------
 # vector versions
 # -------------------------------------------
 
 @testset "check vectors" begin
-	@test flse.vec_softmax_float_turbo(X1F)           ≈ softmax(X1F)
-	@test flse.vec_logsumexp_float_turbo(X1F)         ≈ logsumexp(X1F)
-	@test flse.vec_logsumexp_dual_reinterp(X1D)       ≈ logsumexp(X1D)
-	@test flse.vec_logsumexp_dual_reinterp!(tmp, X1D) ≈ logsumexp(X1D)
+	for s in sigmas
+		@test flse.vec_softmax_float_turbo(X1F, s)           ≈ softmax(X1F./s)
+		@test flse.vec_logsumexp_float_turbo(X1F, s)         ≈ s*logsumexp(X1F ./ s)
+		@test flse.vec_logsumexp_dual_reinterp(X1D, s)       ≈ s*logsumexp(X1D ./ s)
+		@test flse.vec_logsumexp_dual_reinterp!(tmp, X1D, s) ≈ s*logsumexp(X1D ./ s)
+	end
 end
 
 # -------------------------------------------
@@ -53,17 +57,24 @@ end
 
 @testset "Check matrix" begin
 	@testset "Floats" begin
-		                         logsumexp!(        VbarF,           XF)
-        bmark_F = copy(VbarF)
-		@test bmark_F ≈ flse.mat_logsumexp_vexp_log_fast!(VbarF, tmp_maxF, XF)
-		@test bmark_F ≈ flse.mat_logsumexp_float_turbo!(  VbarF, tmp_maxF, XF)
+		for s in sigmas
+		# s = 0.5
+									logsumexp!(        VbarF,           XF./s)
+			VbarF .*= s
+			bmark_F = copy(VbarF)
+			@test bmark_F ≈ flse.mat_logsumexp_vexp_log_fast!(VbarF, tmp_maxF, XF, s)
+			@test bmark_F ≈ flse.mat_logsumexp_float_turbo!(  VbarF, tmp_maxF, XF, s)
+		end
 	end
 	
 	@testset "Duals" begin
-                                 logsumexp!(              VbarD,           XD)
-        bmark_D = copy(VbarD)
-		@test bmark_D ≈ flse.mat_logsumexp_vexp_log_fast!(VbarD, tmp_maxD,        XD)
-		@test bmark_D ≈ flse.mat_logsumexp_dual_reinterp!(VbarD, tmp_maxF, XFtmp, XD)
+		for s in sigmas		
+	                                 logsumexp!(              VbarD,           XD./s)
+			VbarD .*= s
+			bmark_D = copy(VbarD)
+			@test bmark_D ≈ flse.mat_logsumexp_vexp_log_fast!(VbarD, tmp_maxD,        XD, s)
+			@test bmark_D ≈ flse.mat_logsumexp_dual_reinterp!(VbarD, tmp_maxF, XFtmp, XD, s)
+		end	
 	end
 end
 
