@@ -4,6 +4,8 @@
 
 "fastest logsumexp over Dual vector requires tmp vector"
 function vec_logsumexp_dual_reinterp!(tmp::AbstractVector{V}, X::AbstractVector{<:FD.Dual{T,V,K}}, scale::Number=1) where {T,V,K}
+    scale > 0 || throw(DomainError(scale, "scale must be positive"))
+    
     Xre   = reinterpret(reshape, V, X)
 
     invscale = inv(scale)
@@ -52,6 +54,8 @@ end
 
 "logsumexp with @turbo. maybe a bit less safe/stable... but REALLY fast!"
 function vec_logsumexp_float_turbo(x::AbstractVector{T}, scale::Number=1) where {T<:AbstractFloat}
+    scale > 0 || throw(DomainError(scale, "scale must be positive"))
+    
     n = length(x)
     u = maximum(x)                                       # max value used to re-center
     
@@ -71,6 +75,8 @@ end
 
 "softmax with @turbo. maybe a bit less safe/stable... but REALLY fast!"
 function vec_softmax_float_turbo!(r::AbstractVector, x::AbstractVector{T}, scale::Number=1) where {T<:AbstractFloat}
+    scale > 0 || throw(DomainError(scale, "scale must be positive"))
+
     n = length(x)
     u = maximum(x) # max value used to re-center
 

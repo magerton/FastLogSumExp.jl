@@ -105,3 +105,94 @@ function mat_logsumexp_float_turbo!(Vbar::AbstractVector{T}, tmp_max::AbstractVe
     return Vbar
 end
 
+
+
+# --------------------------------------------------
+# Matrix softmax!
+# --------------------------------------------------
+
+
+"faster softmax! leverages @turbo"
+function mat_softmax_float_turbo!(q::AbstractMatrix{<:AbstractFloat}, tmp_max, u, scale::Number=1)
+    
+    scale > 0 || throw(DomainError(scale, "scale must be positive"))
+
+    m,n = size(q)
+    (m,n) == size(u) || throw(DimensionMismatch())
+    length(tmp_max) == m || throw(DimensionMismatch())
+    
+    T = eltype(q)
+    fill!(tmp_max, typemin(T))
+
+    invscale = inv(scale)
+
+    @turbo for i in 1:m, j in 1:n
+        tmp_max[i] = max(tmp_max[i], u[i,j])
+    end
+
+    @turbo for i in 1:m, j in 1:n
+        q[i,j] = exp((u[i,j] - tmp_max[i])*invscale)
+    end
+
+    fill!(tmp_max, 0)
+    @turbo for i in 1:m, j in 1:n
+        tmp_max[i] += q[i,j]
+    end
+
+    @turbo for i in 1:m
+        s = tmp_max[i]
+        invs = inv(s)
+        for j in 1:n
+            q[i,j] *= invs
+        end
+    end
+    return q
+end
+
+
+
+"faster softmax! leverages @simd & @turbo where possible"
+function mat_softmax_float_dual!(q::AbstractMatrix{<:FD.Dual}, tmp_max, u, scale::Number=1)
+
+    scale > 0 || throw(DomainError(scale, "scale must be positive"))
+
+    m,n = size(q)
+    (m,n) == size(u) || throw(DimensionMismatch())
+    length(tmp_max) == m || throw(DimensionMismatch())
+    
+    tmpmaxr = reinterpret(reshape, Float64, tmp_max)
+    qr = reinterpret(reshape, Float64, q)
+    k = size(tmpmaxr, 1)
+
+    T = eltype(q)
+    fill!(tmp_max, typemin(T))
+
+    invscale = inv(scale)
+
+    @inbounds for j in 1:n
+        @simd for i in 1:m
+            tmp_max[i] = max(tmp_max[i], u[i,j])
+        end
+    end
+
+    @inbounds for j in 1:n
+        @simd for i in 1:m
+            q[i,j] = exp((u[i,j] - tmp_max[i])*invscale)
+        end
+    end
+
+    fill!(tmp_max, 0)
+    
+    @turbo for k in 1:k, i in 1:m, j in 1:n
+        tmpmaxr[k,i,j] += qr[k,i,j]
+    end
+
+    @inbounds for i in 1:m
+        s = tmp_max[i]
+        invs = inv(s)
+        @simd for j in 1:n
+            q[i,j] *= invs
+        end
+    end
+    return q
+end

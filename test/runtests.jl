@@ -22,6 +22,8 @@ XD = randX.*thetad'
 
 XFtmp = similar(XF)
 XDtmp = similar(XD)
+qFtmp = similar(XF)
+qDtmp = similar(XD)
 
 VbarF = Vector{eltype(XF)}(undef, n)
 VbarD = Vector{eltype(XD)}(undef, n)
@@ -64,6 +66,10 @@ end
 			bmark_F = copy(VbarF)
 			@test bmark_F ≈ flse.mat_logsumexp_vexp_log_fast!(VbarF, tmp_maxF, XF, s)
 			@test bmark_F ≈ flse.mat_logsumexp_float_turbo!(  VbarF, tmp_maxF, XF, s)
+
+			softmax!(qFtmp, XF./s; dims=2)
+			qFtmp0 = copy(qFtmp)
+			@test qFtmp0 ≈ flse.mat_softmax_float_turbo!(qFtmp, tmp_maxF, XF, s)
 		end
 	end
 	
@@ -74,6 +80,10 @@ end
 			bmark_D = copy(VbarD)
 			@test bmark_D ≈ flse.mat_logsumexp_vexp_log_fast!(VbarD, tmp_maxD,        XD, s)
 			@test bmark_D ≈ flse.mat_logsumexp_dual_reinterp!(VbarD, tmp_maxF, XFtmp, XD, s)
+
+			softmax!(qDtmp, XD./s; dims=2)
+			qDtmp0 = copy(qDtmp)
+			@test qDtmp0 ≈ flse.mat_softmax_float_dual!(qDtmp, tmp_maxD, XD, s)
 		end	
 	end
 end
