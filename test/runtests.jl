@@ -83,7 +83,7 @@ end
 
 			softmax!(qDtmp, XD./s; dims=2)
 			qDtmp0 = copy(qDtmp)
-			@test qDtmp0 ≈ flse.mat_softmax_float_dual!(qDtmp, tmp_maxD, XD, s)
+			@test qDtmp0 ≈ flse.mat_softmax_dual_reinterp!(qDtmp, tmp_maxD, XD, s)
 		end	
 	end
 end

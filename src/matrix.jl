@@ -152,7 +152,7 @@ end
 
 
 "faster softmax! leverages @simd & @turbo where possible"
-function mat_softmax_float_dual!(q::AbstractMatrix{<:FD.Dual}, tmp_max, u, scale::Number=1)
+function mat_softmax_dual_reinterp!(q::AbstractMatrix{<:FD.Dual}, tmp_max, u, scale::Number=1)
 
     scale > 0 || throw(DomainError(scale, "scale must be positive"))
 
